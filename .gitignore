@@ -1,0 +1,10 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Local config
+config.py
+
+# Export results
+outline_export/

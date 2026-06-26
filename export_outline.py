@@ -13,35 +13,16 @@ HEADERS = {
 def sanitize_name(name):
     return re.sub(r'[\\/*?:"<>|]', "", name).strip()
 
-def resolve_ids(doc_id):
-    res_doc = requests.post(f"{config.BASE_URL}/documents.info", headers=HEADERS, json={"id": doc_id})
-    if res_doc.status_code != 200:
-        print(f"Error: Document {doc_id} not found.")
-        return None, None
-    
-    doc_data = res_doc.json().get('data', {})
-    return doc_data.get('collectionId'), doc_data.get('id'), doc_data.get('title')
-
-def build_tree(documents):
-    nodes = {doc['id']: {**doc, 'children': []} for doc in documents}
-    tree = []
-    for node in nodes.values():
-        parent_id = node.get('parentDocumentId')
-        if parent_id and parent_id in nodes:
-            nodes[parent_id]['children'].append(node)
-        else:
-            tree.append(node)
-    return tree
-
-def find_target_node(nodes, target_id):
-    for node in nodes:
-        if node.get('id') == target_id:
-            return node
-        if node.get('children'):
-            found = find_target_node(node['children'], target_id)
-            if found:
-                return found
-    return None
+def fetch_document_tree(doc_id):
+    res = requests.post(
+        f"{config.BASE_URL}/documents.documents",
+        headers=HEADERS,
+        json={"id": doc_id},
+    )
+    if res.status_code != 200:
+        print(f"API Error: {res.text}")
+        return None
+    return res.json().get("data")
 
 def build_export_list(node, current_path=""):
     export_list = []
@@ -69,30 +50,12 @@ def download_document(doc_id, save_path):
         print(f"Error downloading {doc_id}: {response.status_code}")
 
 def main():
-    coll_uuid, doc_uuid, doc_title = resolve_ids(config.TARGET_DOCUMENT_ID)
-    if not coll_uuid or not doc_uuid:
+    target_node = fetch_document_tree(config.TARGET_DOCUMENT_ID)
+    if not target_node:
         return
 
-    print(f"Target: {doc_title}")
-    
-    res = requests.post(
-        f"{config.BASE_URL}/documents.list", 
-        headers=HEADERS, 
-        json={"collectionId": coll_uuid, "limit": 100}
-    )
-    
-    if res.status_code != 200:
-        print(f"API Error: {res.text}")
-        return
-        
-    documents = res.json().get('data', [])
-    tree = build_tree(documents)
-    target_node = find_target_node(tree, doc_uuid)
-    
-    if not target_node:
-        print("Error: Document not found in tree.")
-        return
-        
+    print(f"Target: {target_node.get('title', 'Untitled')}")
+
     docs_to_download = build_export_list(target_node)
     print(f"Downloading {len(docs_to_download)} documents...\n")
     
